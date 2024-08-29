@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-!pip install conditionalconformal
+!pip install conditionalconformal # Install the 'conditionalconformal' package for conditional coverage prediction
 
 import pandas as pd
 import numpy as np
@@ -26,30 +26,28 @@ df = pd.read_csv('treatment_effect_data.csv')
 mapping = {1: "Asian", 2: "Black", 3: "Hispanic", 4: "White"}
 df['Group'] = df['Group'].map(mapping)
 
-# Create dummy variables, dropping the first to avoid multicollinearity
-df_dummies = pd.get_dummies(df, columns=['Group'], prefix='Group', drop_first=True)
+# Create dummy variables for each group
+df_dummies = pd.get_dummies(df, columns=['Group'], prefix='Group', drop_first=False)
 
 # Convert all columns that start with 'Group_' to integers
 df_dummies.loc[:, df_dummies.columns.str.startswith('Group_')] = df_dummies.loc[:, df_dummies.columns.str.startswith('Group_')].astype(int)
 
-# Display the first few rows of the revised DataFrame
-df_dummies.head()
 
-# Select features for the model, now with only 3 dummy variables
-features = ['WaitlistDuration', 'QualityScore', 'OutcomeScore', 'efficiency', "Group_Black", "Group_Hispanic", "Group_White"]
-
+# Select features for the model
+features = ['WaitlistDuration', 'QualityScore', 'OutcomeScore', 'efficiency', 'Group_Asian', 'Group_Black', 'Group_Hispanic', 'Group_White']
 dataSub = df_dummies[features]
-
-# Display the first few rows of the subset DataFrame
-dataSub.head()
 
 # Prepare X and Y for modeling
 X = dataSub.drop(['efficiency'], axis=1)
-X['intercept'] = np.ones(len(X))
-
-# Rename columns
-X.columns = ['WaitlistDuration', 'QualityScore', 'OutcomeScore', "Group_Black", "Group_Hispanic", "Group_White", 'intercept']
 Y = dataSub['efficiency']
+
+
+def phiFn(X):
+    protectedFeatures = [3, 4, 5, 6]  # Indices for Group Indicators
+    if X.ndim == 1:
+        X = X.reshape(1, -1)
+    phi = X[:, protectedFeatures]
+    return phi
 
 def run_single_simulation(X, Y, seed):
     np.random.seed(seed)
@@ -75,13 +73,6 @@ def run_single_simulation(X, Y, seed):
 
     reg = LinearRegression().fit(XTrain, YTrain)
     scoreFn = lambda x, y: np.abs(y - reg.predict(x))
-
-    def phiFn(X):
-        protectedFeatures = [3, 4, 5, 6]
-        if X.ndim == 1:
-            X = X.reshape(1, -1)
-        phi = X[:, protectedFeatures]
-        return phi
 
     alpha = 0.05
 
@@ -123,25 +114,20 @@ def run_single_simulation(X, Y, seed):
     overall_coverage, overall_predictions = custom_verify_coverage(condCovProgram, XTest, YTest, alpha, randomize=True)
 
     group_results = {}
-    group_columns = ["Group_Black", "Group_Hispanic", "Group_White"]
+    group_columns = ["Group_Asian", "Group_Black", "Group_Hispanic", "Group_White"]
     for i, group in enumerate(group_columns):
         group_mask = XTest[:, 3+i] == 1
         group_coverage, group_predictions = custom_verify_coverage(condCovProgram, XTest[group_mask], YTest[group_mask], alpha, randomize=True)
         group_results[group] = (group_coverage, group_predictions)
 
-    asian_mask = (XTest[:, 3] == 0) & (XTest[:, 4] == 0) & (XTest[:, 5] == 0)
-    asian_coverage, asian_predictions = custom_verify_coverage(condCovProgram, XTest[asian_mask], YTest[asian_mask], alpha, randomize=True)
-    group_results["Group_Asian"] = (asian_coverage, asian_predictions)
-
     return overall_coverage, overall_predictions, group_results
-
 
 def run_kfold_simulation(X, Y, n_splits=5):
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
 
     overall_coverages = []
     overall_predictions = []
-    group_results = {group: {"coverages": [], "predictions": []} for group in ["Group_Black", "Group_Hispanic", "Group_White", "Group_Asian"]}
+    group_results = {group: {"coverages": [], "predictions": []} for group in ["Group_Asian", "Group_Black", "Group_Hispanic", "Group_White"]}
 
     for fold, (train_index, test_index) in enumerate(kf.split(X), 1):
         print(f"Running fold {fold}/{n_splits}")
@@ -163,13 +149,6 @@ def run_kfold_simulation(X, Y, n_splits=5):
         # Fit the model and compute scores
         reg = LinearRegression().fit(XTrain, YTrain)
         scoreFn = lambda x, y: np.abs(y - reg.predict(x))
-
-        def phiFn(X):
-            protectedFeatures = [3, 4, 5, 6]
-            if X.ndim == 1:
-                X = X.reshape(1, -1)
-            phi = X[:, protectedFeatures]
-            return phi
 
         alpha = 0.05
 
