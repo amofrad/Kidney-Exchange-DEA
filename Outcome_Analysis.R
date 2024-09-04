@@ -63,7 +63,9 @@ summary(cr_model)
 
 
 
-
+################################################################################
+################### CUMULATIVE INCIDENCE FUNCTION PLOT (Fig. 3) ################
+################################################################################
 # Calculate cumulative incidence functions
 cif <- cmprsk::cuminc(ftime = outcome_data$GTIME_KI,
                       fstatus = outcome_data$CR_STATUS,
