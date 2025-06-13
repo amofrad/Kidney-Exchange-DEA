@@ -2,6 +2,10 @@
 
 This repository contains the R code used for the analysis in the paper "A Data Envelopment Analysis Approach for Assessing Fairness in Resource Allocation: Application to Kidney Exchange Programs".
 
+
+**Paper:** [https://arxiv.org/abs/2410.02799](https://arxiv.org/abs/2410.02799)
+
+
 ## Data
 
 The empirical analysis utilizes data from the United Network for Organ Sharing (UNOS), specifically the kidney/pancreas transplant registry and living donor database. Due to data use agreements and patient privacy protections, the original datasets cannot be distributed with the code.
