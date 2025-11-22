@@ -5,19 +5,19 @@ library(ggplot2)
 library(Benchmarking)
 
 dmu_data <- read.csv("dmu_data.csv")
-Final_Data <- read.csv("Final_Data.csv")
+DEA_data <- read.csv("DEA_data.csv")
 
-treatment_effect <- data.frame(
-  Group = Final_Data$Group,
-  Year = Final_Data$Year,
-  WaitlistDuration = Final_Data$WaitlistDuration,
-  LKDPI = Final_Data$LKDPI,
-  GraftLifespan = Final_Data$GTIME_KI,
-  EDUCATION = as.factor(Final_Data$EDUCATION),
-  REGION = as.factor(Final_Data$REGION),
-  CITIZENSHIP = as.factor(Final_Data$CITIZENSHIP),
-  AGE = Final_Data$AGE,
-  GENDER = Final_Data$GENDER
+supplement_sim_data <- data.frame(
+  Group = DEA_data$Group,
+  Year = DEA_data$Year,
+  WaitlistDuration = DEA_data$WaitlistDuration,
+  LKDPI = DEA_data$LKDPI,
+  GraftLifespan = DEA_data$GTIME_KI,
+  EDUCATION = as.factor(DEA_data$EDUCATION),
+  REGION = as.factor(DEA_data$REGION),
+  CITIZENSHIP = as.factor(DEA_data$CITIZENSHIP),
+  AGE = DEA_data$AGE,
+  GENDER = DEA_data$GENDER
 )
 
 # ESRD Prevalence Counts by Year (https://usrds-adr.niddk.nih.gov/2024/reference-tables, Table B.1)
@@ -45,7 +45,7 @@ groups <- c("Asian", "Black", "Hispanic", "White")
 cov_matrices <- list()
 
 for (group in groups) {
-  group_data <- treatment_effect %>%
+  group_data <- supplement_sim_data %>%
     filter(Group == group) %>%
     dplyr::select(WaitlistDuration, LKDPI, GraftLifespan)
   cov_matrix <- cov(group_data)
@@ -53,7 +53,7 @@ for (group in groups) {
 }
 
 # Data summary for simulation
-data_summary <- treatment_effect %>% 
+data_summary <- supplement_sim_data %>% 
   group_by(Group) %>% 
   summarise(
     wait_mean = mean(WaitlistDuration),
