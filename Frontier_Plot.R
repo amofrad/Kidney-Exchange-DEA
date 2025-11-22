@@ -1,21 +1,41 @@
+library(dplyr)
+library(tidyr)
+library(ggplot2)
 library(Benchmarking)
+library(tidyverse)
 
-Final_Data <- read.csv("Final_Data.csv")
 
-treatment_effect <- data.frame(
-  Group = Final_Data$Group,
-  Year = Final_Data$Year,
-  PriorityScore = Final_Data$WaitlistDuration,
-  QualityScore = Final_Data$LKDPI,
-  OutcomeScore = Final_Data$GTIME_KI,
-  EDUCATION = as.factor(Final_Data$EDUCATION),
-  REGION = as.factor(Final_Data$REGION),
-  CITIZENSHIP = as.factor(Final_Data$CITIZENSHIP),
-  AGE = Final_Data$AGE,
-  GENDER = Final_Data$GENDER
+set.seed(1480)
+
+DEA_data <- read.csv("DEA_data.csv")
+
+frontier_plot_data <- data.frame(
+  Group = DEA_data$Group,
+  Year = DEA_data$Year,
+  PriorityScore = DEA_data$WaitlistDuration,
+  QualityScore = DEA_data$LKDPI,
+  OutcomeScore = DEA_data$GTIME_KI,
+  EDUCATION = as.factor(DEA_data$EDUCATION),
+  REGION = as.factor(DEA_data$REGION),
+  CITIZENSHIP = as.factor(DEA_data$CITIZENSHIP),
+  AGE = DEA_data$AGE,
+  GENDER = DEA_data$GENDER
 )
 
-treatment_effect_2010_2016 <- treatment_effect[treatment_effect$Year <=2016,]
+frontier_plot_data_2010_2019 <- frontier_plot_data[frontier_plot_data$Year <= 2019,]
+
+
+DEA_Result_2010_2019 = read.csv("DEA_Result_2010_2019.csv")
+# Prepare the data - Convert group numbers to labels
+DEA_Result_2010_2019 <- DEA_Result_2010_2019 %>%
+  mutate(Group = case_when(
+    Group == "1" ~ "Asian",
+    Group == "2" ~ "Black", 
+    Group == "3" ~ "Hispanic",
+    Group == "4" ~ "White",
+    TRUE ~ as.character(Group)
+  ))
+DEA_Result_2010_2019$Group <- as.factor(DEA_Result_2010_2019$Group)
 
 ################################################################################
 ###### Plotting Conditional DEA Production Possibility Frontier (Fig. 1) #######
@@ -128,23 +148,8 @@ calculate_conditional_hyperbolic_path <- function(X, Y, local_ref_x, local_ref_y
   return(list(X = path_X, Y = path_Y, eff = eff))
 }
 
-# Prepare the data - Convert group numbers to labels
-DEA_Result_2010_2016 <- DEA_Result_2010_2016 %>%
-  mutate(Group = case_when(
-    Group == "1" ~ "Asian",
-    Group == "2" ~ "Black", 
-    Group == "3" ~ "Hispanic",
-    Group == "4" ~ "White",
-    TRUE ~ as.character(Group)
-  ))
-DEA_Result_2010_2016$Group <- as.factor(DEA_Result_2010_2016$Group)
 
-color_palette <- c(
-  "Asian" = "#08306b",
-  "Black" = "#1f78b4", 
-  "Hispanic" = "#6baed6",
-  "White" = "#b3cde3"
-)
+
 
 
 min_max_scale <- function(data) {
@@ -170,7 +175,7 @@ shift_scores_positive <- function(data) {
 
 gamma <- 0.05
 ref_prop <- 0.10
-treatment_effect_scaled <- min_max_scale(treatment_effect_2010_2016)
+frontier_plot_data_scaled <- min_max_scale(frontier_plot_data_2010_2019)
 
 # Create reference set
 get_diverse_reference <- function(data) {
@@ -181,9 +186,9 @@ get_diverse_reference <- function(data) {
   ) %>% distinct()
 }
 
-target_n_ref <- ceiling(ref_prop * nrow(treatment_effect_scaled))
+target_n_ref <- ceiling(ref_prop * nrow(frontier_plot_data_scaled))
 
-diverse_reference <- get_diverse_reference(treatment_effect_scaled)
+diverse_reference <- get_diverse_reference(frontier_plot_data_scaled)
 n_diverse <- nrow(diverse_reference)
 
 if (n_diverse > target_n_ref) {
@@ -203,176 +208,387 @@ if (n_diverse > target_n_ref) {
     slice_head(n = target_n_ref) %>%
     dplyr::select(-priority_score, -quality_score, -outcome_score, -frontier_value)
   
-  suppressMessages(evaluation_data <- anti_join(treatment_effect_scaled, reference_data))
+  suppressMessages(evaluation_data <- anti_join(frontier_plot_data_scaled, reference_data))
   
 } else {
   n_remaining <- target_n_ref - n_diverse
-  remaining_pool <- anti_join(treatment_effect, diverse_reference)
+  remaining_pool <- anti_join(frontier_plot_data, diverse_reference)
   
   additional_reference <- remaining_pool %>% slice_sample(n = n_remaining)
   reference_data <- bind_rows(diverse_reference, additional_reference)
-  evaluation_data <- anti_join(treatment_effect_scaled, reference_data)
+  evaluation_data <- anti_join(frontier_plot_data_scaled, reference_data)
 }
 
-# Merge efficiency scores from DEA_Result_2010_2016 to the scaled evaluation data
-evaluation_data$efficiency <- DEA_Result_2010_2016$efficiency[match(
+# Merge efficiency scores from DEA_Result_2010_2019 to the scaled evaluation data
+evaluation_data$efficiency <- DEA_Result_2010_2019$efficiency[match(
   paste(evaluation_data$Group, evaluation_data$Year, evaluation_data$AGE),
-  paste(DEA_Result_2010_2016$Group, DEA_Result_2010_2016$Year, DEA_Result_2010_2016$AGE)
+  paste(DEA_Result_2010_2019$Group, DEA_Result_2010_2019$Year, DEA_Result_2010_2019$AGE)
 )]
 
 # Define variable splits
 cont_vars <- c()  
 cat_vars <- c("REGION", "EDUCATION", "CITIZENSHIP")
 
-eval_ref_ids <- sapply(seq_len(nrow(evaluation_data)), function(i) {
-  lr <- get_local_reference(evaluation_data[i, ], reference_data, cont_vars, cat_vars)
-  if (length(lr$indices) >= 10) {
-    paste(sort(lr$indices), collapse = "_")
-  } else {
-    NA
-  }
-})
 
-ref_counts <- table(eval_ref_ids, useNA = "no")
-common_id  <- names(ref_counts)[which.max(ref_counts)]
-all_inds <- which(eval_ref_ids == common_id)
-set.seed(2)
-if(length(all_inds) >= 100) {
-  chosen_inds <- sample(all_inds, 100)
-} else {
-  chosen_inds <- all_inds
-}
+# --- Choose one focal patient from evaluation_data ---
 
-treatment_effect_subset <- evaluation_data[chosen_inds, ]
-
-n_hyper <- ceiling(0.10 * nrow(treatment_effect_subset))
-
-ord        <- order(treatment_effect_subset$efficiency, decreasing = TRUE)
-hyperbolic_indices <- ord[1:n_hyper]
+focal_idx <- sample(seq_len(nrow(evaluation_data)), 1)
 
 
-par(mfrow = c(1, 2), mar = c(5, 5, 1, 2) + 0.1, oma = c(0, 0, 4, 0))
-xlim_common <- c(0, 1)
-ylim_common <- c(0, 1)
+focal      <- evaluation_data[focal_idx, ]
 
-# Plot 1: Priority Score vs Outcome Score
-plot(treatment_effect_subset$PriorityScore, 
-     treatment_effect_subset$OutcomeScore,
-     col = color_palette[treatment_effect_subset$Group],
-     pch = 19, cex = 1.,
-     xlim = xlim_common, ylim = ylim_common,
-     xlab = "Waitlist Duration", ylab = "Graft Lifespan",
-     main = "",
-     cex.lab = 1.5, cex.axis = 1.2,
-     font.lab = 2, font.axis = 1,
-     bty        = "l" )
 
-# Add conditional frontiers and hyperbolic path lines for selected points
-frontiers_plotted <- list()
+# Get local reference set for this focal patient
+local_ref <- get_local_reference(
+  eval_row       = focal,
+  reference_data = reference_data,
+  cont_vars      = cont_vars,
+  cat_vars       = cat_vars
+)
+local_ref_data <- local_ref$reference_subset
 
-for(i in hyperbolic_indices) {
-  eval_row <- treatment_effect_subset[i, ]
+# Conditional frontiers + hyperbolic paths
+frontier_wait <- create_conditional_frontier(
+  local_ref_x = local_ref_data$PriorityScore,
+  local_ref_y = local_ref_data$OutcomeScore,
+  xlim        = c(0, 1), ylim = c(0, 1)
+)
+
+path_wait <- calculate_conditional_hyperbolic_path(
+  X           = focal$PriorityScore,
+  Y           = focal$OutcomeScore,
+  local_ref_x = local_ref_data$PriorityScore,
+  local_ref_y = local_ref_data$OutcomeScore
+)
+
+frontier_qual <- create_conditional_frontier(
+  local_ref_x = local_ref_data$QualityScore,
+  local_ref_y = local_ref_data$OutcomeScore,
+  xlim        = c(0, 1), ylim = c(0, 1)
+)
+
+path_qual <- calculate_conditional_hyperbolic_path(
+  X           = focal$QualityScore,
+  Y           = focal$OutcomeScore,
+  local_ref_x = local_ref_data$QualityScore,
+  local_ref_y = local_ref_data$OutcomeScore
+)
+
+
+
+
+# -----------------------------
+# Build plotting dataframe
+# -----------------------------
+
+# All patients
+df_all <- frontier_plot_data_scaled %>%
+  select(PriorityScore, QualityScore, OutcomeScore) %>%
+  mutate(type = "All patients")
+
+# Local reference set points
+df_ref <- local_ref_data %>%
+  transmute(
+    PriorityScore, QualityScore, OutcomeScore,
+    type = "Local reference set",
+    Group = Group
+  )
+
+# Focal patient (recycled for both panels)
+df_focal <- tibble(
+  PriorityScore = focal$PriorityScore,
+  QualityScore  = focal$QualityScore,
+  OutcomeScore  = focal$OutcomeScore,
+  Group         = focal$Group,
+  type          = "Focal patient"
+)
+
+# Hyperbolic path (two panels)
+df_path_wait <- tibble(
+  X = path_wait$X,
+  Y = path_wait$Y,
+  type = "Hyperbolic path",
+  panel = "Waitlist vs Graft Lifespan"
+)
+
+df_path_qual <- tibble(
+  X = path_qual$X,
+  Y = path_qual$Y,
+  type = "Hyperbolic path",
+  panel = "LKDPI vs Graft Lifespan"
+)
+
+# Projection point
+df_proj <- bind_rows(
+  tibble(
+    X = tail(path_wait$X, 1),
+    Y = tail(path_wait$Y, 1),
+    type = "Projection",
+    panel = "Waitlist vs Graft Lifespan"
+  ),
+  tibble(
+    X = tail(path_qual$X, 1),
+    Y = tail(path_qual$Y, 1),
+    type = "Projection",
+    panel = "LKDPI vs Graft Lifespan"
+  )
+)
+
+# Frontier curves
+df_frontier_wait <- tibble(
+  X = frontier_wait$x,
+  Y = frontier_wait$y,
+  type = "Conditional frontier",
+  panel = "Waitlist vs Graft Lifespan"
+)
+
+df_frontier_qual <- tibble(
+  X = frontier_qual$x,
+  Y = frontier_qual$y,
+  type = "Conditional frontier",
+  panel = "LKDPI vs Graft Lifespan"
+)
+
+# -----------------------------
+# Assemble data for each panel
+# -----------------------------
+df_panel_wait <- tibble(
+  X = c(df_all$PriorityScore),
+  Y = c(df_all$OutcomeScore),
+  type = "All patients",
+  panel = "Waitlist vs Graft Lifespan"
+)
+
+df_panel_qual <- tibble(
+  X = c(df_all$QualityScore),
+  Y = c(df_all$OutcomeScore),
+  type = "All patients",
+  panel = "LKDPI vs Graft Lifespan"
+)
+
+# Combined all-patient frame
+df_all_long <- bind_rows(df_panel_wait, df_panel_qual)
+
+# Reference set long format
+df_ref_long <- bind_rows(
+  tibble(
+    X = df_ref$PriorityScore,
+    Y = df_ref$OutcomeScore,
+    Group = df_ref$Group,
+    type = "Local reference set",
+    panel = "Waitlist vs Graft Lifespan"
+  ),
+  tibble(
+    X = df_ref$QualityScore,
+    Y = df_ref$OutcomeScore,
+    Group = df_ref$Group,
+    type = "Local reference set",
+    panel = "LKDPI vs Graft Lifespan"
+  )
+)
+
+# Focal patient long format
+df_focal_long <- bind_rows(
+  tibble(
+    X = df_focal$PriorityScore,
+    Y = df_focal$OutcomeScore,
+    Group = df_focal$Group,
+    type = "Focal patient",
+    panel = "Waitlist vs Graft Lifespan"
+  ),
+  tibble(
+    X = df_focal$QualityScore,
+    Y = df_focal$OutcomeScore,
+    Group = df_focal$Group,
+    type = "Focal patient",
+    panel = "LKDPI vs Graft Lifespan"
+  )
+)
+
+
+
+
+# -----------------------------
+# Combine for plotting
+# -----------------------------
+df_frontier <- bind_rows(df_frontier_wait, df_frontier_qual)
+df_path     <- bind_rows(df_path_wait, df_path_qual)
+df_proj     <- df_proj
+
+# -----------------------------
+# Aesthetics
+# -----------------------------
+color_palette <- c(
+  "Asian"    = "#08306b",
+  "Black"    = "#1f78b4",
+  "Hispanic" = "#6baed6",
+  "White"    = "#b1dff9"
+)
+
+panel_levels <- c("Waitlist vs Graft Lifespan", "LKDPI vs Graft Lifespan")
+
+df_all_long    <- df_all_long    %>% mutate(panel = factor(panel, levels = panel_levels))
+df_ref_long    <- df_ref_long    %>% mutate(panel = factor(panel, levels = panel_levels))
+df_focal_long  <- df_focal_long  %>% mutate(panel = factor(panel, levels = panel_levels))
+df_frontier    <- df_frontier    %>% mutate(panel = factor(panel, levels = panel_levels))
+df_path        <- df_path        %>% mutate(panel = factor(panel, levels = panel_levels))
+df_proj        <- df_proj        %>% mutate(panel = factor(panel, levels = panel_levels))
+
+
+# -----------------------------
+# Final Plot
+# -----------------------------
+p <- ggplot() +
+  ## ----------------------------------------------------- ##
+  ## 1. Geoms
+  ## ----------------------------------------------------- ##
+  # All patients
+  geom_point(
+    data  = df_all_long,
+    aes(X, Y, color = "All patients"),
+    alpha = 0.4, size = 1
+  ) +
   
-  # Get local reference set for this evaluation point
-  local_ref <- get_local_reference(eval_row, reference_data, cont_vars, cat_vars)
+  # Local reference set (colored by Group, outlined in black)
+  geom_point(
+    data  = df_ref_long,
+    aes(X, Y, fill = Group),
+    shape = 21, size = 4, stroke = 0.6,
+    colour = "black",
+    inherit.aes = FALSE
+  ) +
   
-  print(length(local_ref$indices))
+  # Focal patient (diamond)
+  geom_point(
+    data  = df_focal_long,
+    aes(X, Y, fill = Group,
+        color = "Focal patient",
+        shape = "Focal patient"),
+    size  = 5, stroke = 1.2
+  ) +
   
-  if(length(local_ref$indices) >= 3) {  # Need at least 3 points for a meaningful frontier
-    local_ref_data <- local_ref$reference_subset
-    
-    # Create a unique identifier for this local reference set
-    ref_id <- paste(sort(local_ref$indices), collapse = "_")
-    
-    # Only plot the frontier once per unique local reference set
-    if(!(ref_id %in% names(frontiers_plotted))) {
-      frontier <- create_conditional_frontier(local_ref_data$PriorityScore, 
-                                              local_ref_data$OutcomeScore,
-                                              xlim_common, ylim_common)
-      
-      if(!is.null(frontier)) {
-        # Plot the conditional frontier
-        lines(frontier$x, frontier$y, col = "blue", lwd = 3, lty = 1)
-        frontiers_plotted[[ref_id]] <- TRUE
-      }
-    }
-    
-    # Calculate conditional hyperbolic path
-    path <- calculate_conditional_hyperbolic_path(
-      treatment_effect_subset$PriorityScore[i],
-      treatment_effect_subset$OutcomeScore[i],
-      local_ref_data$PriorityScore,
-      local_ref_data$OutcomeScore
+  # Conditional frontier (line)
+  geom_line(
+    data = df_frontier,
+    aes(X, Y,
+        color    = "Conditional frontier",
+        linetype = "Conditional frontier"),
+    linewidth = 2
+  ) +
+  
+  # Frontier points 
+  geom_point(
+    data  = df_frontier,
+    aes(X, Y,
+        color = "Frontier point",
+        shape = "Frontier point"),
+    stroke = 1.4, size = 4
+  ) +
+  
+  # Hyperbolic path (dashed)
+  geom_path(
+    data = df_path,
+    aes(X, Y,
+        color    = "Hyperbolic path",
+        linetype = "Hyperbolic path"),
+    linewidth = 1
+  ) +
+  
+  # Projection (star)
+  geom_point(
+    data  = df_proj,
+    aes(X, Y,
+        color = "Projection",
+        shape = "Projection"),
+    size = 5, stroke = 1.2
+  ) +
+  
+  # Facets for the two panels
+  facet_wrap(~ panel, scales = "free_x") +
+  
+  ## ----------------------------------------------------- ##
+  ## 2. Scales
+  ## ----------------------------------------------------- ##
+  # Row 1: ethnic groups (fill legend)
+  scale_fill_manual(
+    name   = "Ethnic group",
+    values = color_palette,
+    breaks = c("Asian", "Black", "Hispanic", "White")
+  ) +
+  
+  # Row 2: components (color / linetype / shape all share *another* legend)
+  scale_color_manual(
+    name   = "Components",
+    values = c(
+      #"All patients"         = "grey70",
+      "Conditional frontier" = "royalblue3",
+      "Hyperbolic path"      = "black",
+      "Projection"           = "firebrick3",
+      "Frontier point"       = "brown",
+      "Focal patient"        = "brown"
     )
-    
-    # Draw hyperbolic path
-    lines(path$X, path$Y, col = "darkgray", lty = 2, lwd = 2)
-    points(path$X[length(path$X)], path$Y[length(path$Y)], pch = 8, col = "red", cex = 2)
-  }
-}
-
-# Plot 2: Quality Score vs Outcome Score
-plot(treatment_effect_subset$QualityScore, 
-     treatment_effect_subset$OutcomeScore,
-     col = color_palette[treatment_effect_subset$Group],
-     pch = 19, cex = 1.,
-     xlim = xlim_common, ylim = ylim_common,
-     xlab = "LKDPI", ylab = "Graft Lifespan",
-     main = "",
-     cex.lab = 1.5, cex.axis = 1.2,
-     font.lab = 2, font.axis = 1,
-     bty        = "l" )
-
-
-frontiers_plotted <- list()  # Reset for second plot
-
-for(i in hyperbolic_indices) {
-  eval_row <- treatment_effect_subset[i, ]
-  
-  # Get local reference set for this evaluation point
-  local_ref <- get_local_reference(eval_row, reference_data, cont_vars, cat_vars)
-  
-  print(length(local_ref$indices))
-  
-  if(length(local_ref$indices) >= 3) {  # Need at least 3 points for a meaningful frontier
-    local_ref_data <- local_ref$reference_subset
-
-    ref_id <- paste(sort(local_ref$indices), collapse = "_")
-    if(!(ref_id %in% names(frontiers_plotted))) {
-      frontier <- create_conditional_frontier(local_ref_data$QualityScore, 
-                                              local_ref_data$OutcomeScore,
-                                              xlim_common, ylim_common)
-      
-      if(!is.null(frontier)) {
-        # Plot the conditional frontier
-        lines(frontier$x, frontier$y, col = "blue", lwd = 3, lty = 1)
-        frontiers_plotted[[ref_id]] <- TRUE
-      }
-    }
-    
-    # Calculate conditional hyperbolic path
-    path <- calculate_conditional_hyperbolic_path(
-      treatment_effect_subset$QualityScore[i],
-      treatment_effect_subset$OutcomeScore[i],
-      local_ref_data$QualityScore,
-      local_ref_data$OutcomeScore
+  ) +
+  scale_linetype_manual(
+    name   = "Components",
+    values = c(
+      "Conditional frontier" = "solid",
+      "Hyperbolic path"      = "22"
     )
-    # Plot hyperbolic path 
-    lines(path$X, path$Y, col = "darkgray", lty = 2, lwd = 2)
-    points(path$X[length(path$X)], path$Y[length(path$Y)], pch = 8, col = "red", cex = 2)
-  }
-}
-# Add legend
-par(fig = c(0, 1, 0, 1), oma = c(8, 0, 0, 0), mar = c(0, 0, .5, 0), new = TRUE)
-plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
-legend("top", 
-       legend = c("Asian", "Black", "Hispanic", "White", "Projection"),
-       col = c(color_palette, "red"),
-       pch = c(rep(19, 4), 8),
-       title = "Group", horiz = TRUE, xpd = TRUE, inset = c(0, 0), 
-       cex = 1.15, 
-       text.font = 2, 
-       bty = "n", 
-       x.intersp  = 0.3,
-       pt.cex = 1) 
+  ) +
+  scale_shape_manual(
+    name   = "Components",
+    values = c(
+      "Focal patient"   = 23,  # diamond
+      "Frontier point"  = 16,   # X
+      "Projection"      = 8    # star
+    )
+  ) +
+  
+  ## ----------------------------------------------------- ##
+  ## 3. Guides and theme
+  ## ----------------------------------------------------- ##
+  guides(
+    # First row: ethnic groups
+    fill = guide_legend(
+      order = 1,
+      nrow  = 1,
+      override.aes = list(
+        shape = 21,
+        size  = 6,
+        colour = "black",stroke = 1
+      )
+    ),
+    # Second row: components (merged color/shape/linetype)
+    color = guide_legend(
+      order = 2,
+      nrow  = 1,
+      override.aes = list(
+        linetype = c("solid", "blank", "blank", "22", "blank"),
+        shape    = c( NA, 23, 16, NA, 8),
+        size     = c(8, 6, 6, 8, 6),
+        fill     = NA
+      )
+    ),
+    linetype = "none",  # handled via color guide above
+    shape    = "none"   # handled via color guide above
+  ) +
+  
+  labs(
+    x = "",
+    y = "Graft Lifespan"
+  ) +
+  
+  theme_bw(base_size = 13) +
+  theme(
+    legend.position  = "top",
+    legend.box       = "vertical",   # groups row above components row
+    legend.title     = element_blank(),
+    strip.text       = element_text(size = 16, face = "bold"),
+    axis.title.x     = element_text(size = 12),
+    axis.title.y     = element_text(size = 12),
+    legend.key.size  = unit(0.9, "lines"),
+    legend.text      = element_text(size = 14),
+    panel.grid.minor = element_blank()
+  )
 
+p
