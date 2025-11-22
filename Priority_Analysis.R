@@ -2,28 +2,37 @@ library(mma)
 library(lmtest)
 require(nnet) 
 
-Final_Data <- read.csv("Final_Data.csv")
+DEA_data <- read.csv("DEA_data.csv")
 
-priority_data <- dplyr::select(Final_Data, Priority_Score, Group, REGION,EDUCATION,CITIZENSHIP,
-                               PRI_PAYMENT_TCR_KI,
-                               DISTANCE, WORK_INCOME_TCR,
-                               ON_DIALYSIS, ABO,
-                               PRA,AGE,GENDER, PREV_KI_TX, MED_COND_TRR)
-
-
-priority_data$Group <- relevel(factor(priority_data$Group), ref = "White")
-
-priority_data$REGION <- factor(priority_data$REGION)
-priority_data$EDUCATION <- factor(priority_data$EDUCATION)
-priority_data$CITIZENSHIP <- factor(priority_data$CITIZENSHIP)
-priority_data$PRI_PAYMENT_TCR_KI <- factor(priority_data$PRI_PAYMENT_TCR_KI)
-priority_data$WORK_INCOME_TCR <- factor(priority_data$WORK_INCOME_TCR)
-priority_data$ON_DIALYSIS <- factor(priority_data$ON_DIALYSIS)
-priority_data$ABO <- factor(priority_data$ABO)
-priority_data$GENDER <- factor(priority_data$GENDER)
-priority_data$MED_COND_TRR <- factor(priority_data$MED_COND_TRR)
-priority_data$PREV_KI_TX <- factor(priority_data$PREV_KI_TX)
-
+priority_data <- DEA_data %>%
+  dplyr::select(
+    Priority_Score,
+    Group,
+    REGION, EDUCATION, CITIZENSHIP,
+    PRI_PAYMENT_TCR_KI,
+    DISTANCE, WORK_INCOME_TCR,
+    ON_DIALYSIS, ABO,
+    PRA, AGE, GENDER,
+    PREV_KI_TX, MED_COND_TRR
+  ) %>%
+  dplyr::mutate(
+    Group = stats::relevel(factor(Group), ref = "White"),
+    dplyr::across(
+      c(
+        REGION,
+        EDUCATION,
+        CITIZENSHIP,
+        PRI_PAYMENT_TCR_KI,
+        WORK_INCOME_TCR,
+        ON_DIALYSIS,
+        ABO,
+        GENDER,
+        MED_COND_TRR,
+        PREV_KI_TX
+      ),
+      ~ factor(.)
+    )
+  )
 
 
 drop_all_levels <- function(data) {
