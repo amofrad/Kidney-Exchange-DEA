@@ -3,27 +3,34 @@ library(randomForest)
 library(dplyr)
 
 
-Final_Data <- read.csv("Final_Data.csv")
+DEA_data <- read.csv("DEA_data.csv")
 
 
-access_data <- dplyr::select(Final_Data, LKDPI, Access_Score, ETHCAT, eGFR, AGE_DON, HIST_CIG_DON,
-                             HLA_B_mismatches, HLA_DR_mismatches,
-                             SBP, GENDER, GENDER_DON, ABO_MAT,
-                             ABO_incompatible,
-                             B1, DB1, B2, DB2, DDR1, DR1, DDR2,
-                             DR2, WGT_KG_CALC, WGT_KG_DON_CALC,
-                             WL_days, ABO, ETHCAT_DON,
-                             BMI_DON_CALC, BMI_CALC, AGE,
-                             REGION,EDUCATION,CITIZENSHIP,
-                             PRI_PAYMENT_TCR_KI, PREV_KI_TX,
-                             DISTANCE, WORK_INCOME_TCR, Year
-)
+access_data <- DEA_data %>%
+  dplyr::select(
+    LKDPI, Access_Score, ETHCAT, eGFR, AGE_DON, HIST_CIG_DON,
+    HLA_B_mismatches, HLA_DR_mismatches,
+    SBP, GENDER, GENDER_DON, ABO_MAT,
+    ABO_incompatible,
+    B1, DB1, B2, DB2, DDR1, DR1, DDR2, DR2,
+    WGT_KG_CALC, WGT_KG_DON_CALC,
+    WL_days, ABO, ETHCAT_DON,
+    BMI_DON_CALC, BMI_CALC, AGE,
+    REGION, EDUCATION, CITIZENSHIP,
+    PRI_PAYMENT_TCR_KI, PREV_KI_TX,
+    DISTANCE, WORK_INCOME_TCR, Year
+  ) %>%
+  dplyr::mutate(
+    Donor_Black = factor(ifelse(ETHCAT_DON == "Black", 1, 0)),
+    Don_Rec_WR  = WGT_KG_DON_CALC / WGT_KG_CALC,
+    Don_Rec_WR  = ifelse(Don_Rec_WR >= 0.9, 0.9, Don_Rec_WR)
+  ) %>%
+  dplyr::group_by(Year) %>%
+  dplyr::mutate(
+    LKDPI = LKDPI - mean(LKDPI)   # same as your original (no na.rm)
+  ) %>%
+  dplyr::ungroup()
 
-
-access_data$Donor_Black <- as.factor(ifelse(access_data$ETHCAT_DON == "Black", 1, 0))
-access_data$Don_Rec_WR <- access_data$WGT_KG_DON_CALC / access_data$WGT_KG_CALC
-access_data$Don_Rec_WR <- ifelse(access_data$Don_Rec_WR >= 0.9, 0.9, access_data$Don_Rec_WR)
-access_data <- access_data %>% group_by(Year) %>% mutate(LKDPI = LKDPI - mean(LKDPI)) %>% ungroup()
 access_data %>% group_by(ETHCAT) %>% summarise(mean(LKDPI), median(LKDPI))
 
 
@@ -84,12 +91,9 @@ SST <- sum((access_data$LKDPI - mean(access_data$LKDPI))^2)
 overall_r_squared <- 1 - SSR/SST
 print(paste("Overall R-squared:", overall_r_squared))
 # Compute other metrics
-MAE <- mean(abs(all_predictions - access_data$LKDPI))
-MSE <- mean((all_predictions - access_data$LKDPI)^2)
-RMSE <- sqrt(MSE)
-print(paste("MAE:", MAE))
-print(paste("MSE:", MSE))
-print(paste("RMSE:", RMSE))
+(MAE <- mean(abs(all_predictions - access_data$LKDPI)))
+(MSE <- mean((all_predictions - access_data$LKDPI)^2))
+(RMSE <- sqrt(MSE))
 
 # Create a copy of the dataset for counterfactual analysis
 access_data_cf <- access_data
