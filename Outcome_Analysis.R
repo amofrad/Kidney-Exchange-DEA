@@ -7,82 +7,90 @@ library(ggplot2)
 library(tidyr)
 library(patchwork)
 
-Final_Data <- read.csv("Final_Data.csv")
+DEA_data <- read.csv("DEA_data.csv")
 
-outcome_data <- dplyr::select(Final_Data, 
-                              GTIME_KI, GRF_FAIL_CAUSE_TY_KI, GSTATUS_KI, 
-                              ETHCAT, AGE, GENDER, PRA, ON_DIALYSIS, ABO, 
-                              LKDPI, AGE_DON, BMI_DON_CALC, BMI_CALC,
-                              REGION,EDUCATION,CITIZENSHIP,
-                              PRI_PAYMENT_TCR_KI, PREV_KI_TX,
-                              DISTANCE, WORK_INCOME_TRR,
-                              TRTREJ1Y_KI, TRTREJ6M_KI, FUNC_STAT_TRF, Year
-)
+# Build outcome_data
+outcome_data <- DEA_data %>%
+  dplyr::select(
+    GTIME_KI, GRF_FAIL_CAUSE_TY_KI, GSTATUS_KI,
+    ETHCAT, AGE, GENDER, PRA, ON_DIALYSIS, ABO,
+    LKDPI, AGE_DON, BMI_DON_CALC, BMI_CALC,
+    REGION, EDUCATION, CITIZENSHIP,
+    PRI_PAYMENT_TCR_KI, PREV_KI_TX,
+    DISTANCE, WORK_INCOME_TRR,
+    TRTREJ1Y_KI, TRTREJ6M_KI, FUNC_STAT_TRF, Year
+  ) %>%
+  # Center GTIME_KI within year and round
+  dplyr::group_by(Year) %>%
+  dplyr::mutate(
+    GTIME_KI = round(GTIME_KI - mean(GTIME_KI))
+  ) %>%
+  dplyr::ungroup()
 
-outcome_data <- outcome_data %>% group_by(Year) %>% mutate(GTIME_KI = round(GTIME_KI - mean(GTIME_KI)))
-
+# Ensure GTIME_KI is strictly positive
 min_time <- min(outcome_data$GTIME_KI)
-if(min_time < 0) {
-  outcome_data$GTIME_KI <- outcome_data$GTIME_KI - min_time + 1
+if (min_time < 0) {
+  outcome_data <- outcome_data %>%
+    dplyr::mutate(GTIME_KI = GTIME_KI - min_time + 1)
 }
 
-
-
+# Recode GRF_FAIL_CAUSE_TY_KI to numeric codes
 outcome_data <- outcome_data %>%
-  mutate(GRF_FAIL_CAUSE_TY_KI = case_when(
-    GRF_FAIL_CAUSE_TY_KI == "Hyperacute Rejection" ~ 1,
-    GRF_FAIL_CAUSE_TY_KI == "Acute Rejection" ~ 2,
-    GRF_FAIL_CAUSE_TY_KI == "Primary Failure" ~ 3,
-    GRF_FAIL_CAUSE_TY_KI == "Graft Thrombosis" ~ 4,
-    GRF_FAIL_CAUSE_TY_KI == "Infection" ~ 5,
-    GRF_FAIL_CAUSE_TY_KI == "Surgical Complications" ~ 6,
-    GRF_FAIL_CAUSE_TY_KI == "Urological Complications" ~ 7,
-    GRF_FAIL_CAUSE_TY_KI == "Recurrent Disease" ~ 8,
-    GRF_FAIL_CAUSE_TY_KI == "Primary Non-Function (Graft Never Functioned Post-Transplant)" ~ 9,
-    GRF_FAIL_CAUSE_TY_KI == "Chronic Rejection" ~ 10,
-    GRF_FAIL_CAUSE_TY_KI == "BK (Polyoma) Virus" ~ 11,
-    GRF_FAIL_CAUSE_TY_KI == "Primary Non-Function (Graft Never Functioned Post-Transplant)" ~ 12,
-    GRF_FAIL_CAUSE_TY_KI == "Other" ~ 999,
-    TRUE ~ NA_real_ 
-  ))
-
-outcome_data <- outcome_data %>%
-  mutate(GRF_FAIL_CAUSE = case_when(
-    GRF_FAIL_CAUSE_TY_KI %in% c(1,2,10) ~ 1,
-    !is.na(GRF_FAIL_CAUSE_TY_KI) ~ 2,
-    TRUE ~ 2
-  ))
-
-# Create the status variable for competing risks
-outcome_data <- outcome_data %>%
-  mutate(CR_STATUS = case_when(
-    GSTATUS_KI == 0 ~ 0,  # No graft failure
-    GSTATUS_KI == 1 & GRF_FAIL_CAUSE == 1 ~ 1, # Graft failure due to rejection
-    GSTATUS_KI == 1 & GRF_FAIL_CAUSE == 2 ~ 2  # Graft failure from other causes
-  ))
-
-
-outcome_data <- outcome_data %>%
-  mutate(
-    REGION = factor(REGION),
-    EDUCATION = factor(EDUCATION),
-    CITIZENSHIP = factor(CITIZENSHIP),
-    TRTREJ1Y_KI = factor(TRTREJ1Y_KI),
+  dplyr::mutate(
+    GRF_FAIL_CAUSE_TY_KI = dplyr::case_when(
+      GRF_FAIL_CAUSE_TY_KI == "Hyperacute Rejection" ~ 1,
+      GRF_FAIL_CAUSE_TY_KI == "Acute Rejection" ~ 2,
+      GRF_FAIL_CAUSE_TY_KI == "Primary Failure" ~ 3,
+      GRF_FAIL_CAUSE_TY_KI == "Graft Thrombosis" ~ 4,
+      GRF_FAIL_CAUSE_TY_KI == "Infection" ~ 5,
+      GRF_FAIL_CAUSE_TY_KI == "Surgical Complications" ~ 6,
+      GRF_FAIL_CAUSE_TY_KI == "Urological Complications" ~ 7,
+      GRF_FAIL_CAUSE_TY_KI == "Recurrent Disease" ~ 8,
+      GRF_FAIL_CAUSE_TY_KI ==
+        "Primary Non-Function (Graft Never Functioned Post-Transplant)" ~ 9,
+      GRF_FAIL_CAUSE_TY_KI == "Chronic Rejection" ~ 10,
+      GRF_FAIL_CAUSE_TY_KI == "BK (Polyoma) Virus" ~ 11,
+      GRF_FAIL_CAUSE_TY_KI == "Primary Non-Function (Graft Never Functioned Post-Transplant)" ~ 12,
+      GRF_FAIL_CAUSE_TY_KI == "Other" ~ 999,
+      TRUE ~ NA_real_
+    )
+  ) %>%
+  # Collapse causes into rejection vs other
+  dplyr::mutate(
+    GRF_FAIL_CAUSE = dplyr::case_when(
+      GRF_FAIL_CAUSE_TY_KI %in% c(1, 2, 10) ~ 1,
+      !is.na(GRF_FAIL_CAUSE_TY_KI)          ~ 2,
+      TRUE                                  ~ 2
+    )
+  ) %>%
+  # Competing risks status
+  dplyr::mutate(
+    CR_STATUS = dplyr::case_when(
+      GSTATUS_KI == 0                      ~ 0L,  # No graft failure
+      GSTATUS_KI == 1 & GRF_FAIL_CAUSE == 1 ~ 1L, # Failure due to rejection
+      GSTATUS_KI == 1 & GRF_FAIL_CAUSE == 2 ~ 2L  # Failure from other causes
+    )
+  ) %>%
+  # Factor conversions and reference level for ETHCAT
+  dplyr::mutate(
+    REGION        = factor(REGION),
+    EDUCATION     = factor(EDUCATION),
+    CITIZENSHIP   = factor(CITIZENSHIP),
+    TRTREJ1Y_KI   = factor(TRTREJ1Y_KI),
     WORK_INCOME_TRR = factor(WORK_INCOME_TRR),
-    ETHCAT = relevel(factor(ETHCAT), ref = "White")
+    ETHCAT        = stats::relevel(factor(ETHCAT), ref = "White")
   )
 
-
-
-# Set sum-to-zero contrasts for ETHCAT
-contrasts(outcome_data$ETHCAT) <- contr.sum(4)  # 4 levels
+# Sum-to-zero contrasts for ETHCAT (4 levels)
+contrasts(outcome_data$ETHCAT) <- contr.sum(4)
 colnames(contrasts(outcome_data$ETHCAT)) <- c("Asian", "Black", "Hispanic")
 
-# Refit your model
+# Fit the competing risks model
 cs_model <- CSC(
   formula = Hist(GTIME_KI, CR_STATUS) ~ ETHCAT + TRTREJ1Y_KI + WORK_INCOME_TRR,
-  data = outcome_data
+  data    = outcome_data
 )
+
 
 # Results (as summarized in Table 6)
 (cs_model)
