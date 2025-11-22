@@ -13,7 +13,7 @@ The empirical analysis utilizes data from the United Network for Organ Sharing (
 ## Code Files and Corresponding Paper Sections
 
 ### Data_Preprocessing.R
-This script performs exploratory data analysis (Sections 3.1-3.2), generating summary statistics for key fairness criteria across ethnic groups. It computes LKDPI scores by matching transplant observations with donor characteristics, implements stratified resampling to match ESRD prevalence statistics, and applies year-specific centering of fairness measures. The script produces Tables 1-3 and Figure 2, and generates `Final_Data.csv` for subsequent analyses.
+This script performs exploratory data analysis (Sections 3.1-3.2), generating summary statistics for key fairness criteria across ethnic groups. It computes LKDPI scores by matching transplant observations with donor characteristics, implements stratified resampling to match ESRD prevalence statistics, and applies year-specific centering of fairness measures. The script produces Tables 1-3 and Figure 2, and generates `DEA_data.csv` for subsequent analyses.
 
 ### Priority_Analysis.R
 This code conducts mediation analysis for the Priority Fairness criteria (Section 3.3). It employs likelihood ratio testing for mediator selection and decomposes the total effect of ethnicity on waitlist duration into direct and indirect pathways using bootstrap confidence intervals. The analysis produces Table 4 summarizing mediation effects by ethnic group.
@@ -43,7 +43,7 @@ This code implements the simulation study described in Section S2 of the Supplem
 
 Run the scripts in the following sequence:
 
-1. `Data_Preprocessing.R` (creates `Final_Data.csv`)
+1. `Data_Preprocessing.R` (creates `DEA_data.csv`)
 2. Individual fairness analyses (can be run in any order):
    - `Priority_Analysis.R`
    - `Access_Analysis.R` 
