@@ -15,7 +15,7 @@ colnames(kidney_data) <- c("WL_ORG", "COD_WL", "COD_OSTXT_WL", "NUM_PREV_TX", "C
 ################################# DATA PREP ####################################
 ################################################################################
 
-kidney_data <- KIDPAN_DATA_KPD %>%
+kidney_data <- kidney_data %>%
   # KPD only
   filter(LIV_DON_TY == 9) %>%
   mutate(
