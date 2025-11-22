@@ -8,7 +8,7 @@ This repository contains the R code used for the analysis in the paper "A Data E
 
 ## Data
 
-The empirical analysis utilizes data from the United Network for Organ Sharing (UNOS), specifically the kidney/pancreas transplant registry and living donor database. Due to data use agreements and patient privacy protections, the original datasets cannot be distributed with the code. To support reproducibility, we provide a version of the processed data with sensitive information removed. These files are available for download in `data_files.zip`, included in this repository.
+The empirical analysis utilizes data from the United Network for Organ Sharing (UNOS), specifically the kidney/pancreas transplant registry and living donor database. Due to data use agreements and patient privacy protections, the original datasets cannot be distributed with the code. To support reproducibility, we provide a version of the processed data with sensitive information removed. These files are available for download in `data_files.zip`.
 
 ## Code Files and Corresponding Paper Sections
 
